@@ -42,15 +42,7 @@ def process_and_save_data(df, out_path=PROCESSED_PATH):
     return processed_df
 
 
-def split_and_save_data(
-    df: pd.DataFrame,
-    target_col: str = "Pass",
-    test_size: float = 0.2,
-    val_size: float = 0.2,
-    random_state: int = 42,
-    stratify=None,
-    out_dir: str = "data/processed/splits"
-
+def split_and_save_data(df: pd.DataFrame, target_col: str = "Pass", test_size: float = 0.2, val_size: float = 0.25, random_state: int = 42, stratify=None, out_dir: str = "data/processed/splits"
 ):
 
     # Split train/test first
