@@ -1,22 +1,59 @@
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
 
-def select_features(df):
-    selected = ["traveltime", "studytime", "failures", "schoolsup", "paid",
-                "activities", "higher", "internet", "freetime", "absences", "G1", "G2", "G3", "Pass"]
-    return df[selected]
+def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["avg_prev_grades"] = (df["G1"] + df["G2"]) / 2
+    df['fail_abs_ratio'] = df['failures'] / (df['absences'] + 1)
+    return df
 
-def preprocess_features(X, target_col=None, scaler=None):
-    if target_col:
-        X = X.drop(columns=[target_col])
+def encode_binary_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    binary_cols = [
+        "schoolsup", "famsup", "paid", "activities", "nursery",
+        "higher", "internet", "romantic", "sex"
+    ]
+    for col in binary_cols:
+        df[col] = df[col].map({"yes": 1, "no": 0, "M": 1, "F": 0})
+    return df
+
+def create_feature_pipeline(df: pd.DataFrame):
+    df = add_engineered_features(df)
+    df = encode_binary_features(df)
+
+    categorical_cols = ["school", "address", "famsize", "Pstatus", "Mjob", "Fjob", "reason", "guardian"]
+    # categorical_cols = [] unCommenting this makes it better
+
+    numeric_cols = [
+        "age", "Medu", "Fedu", "traveltime", "studytime", "failures",
+        "famrel", "freetime", "goout", "Dalc", "Walc", "health",
+        "absences", "G1", "G2", "avg_prev_grades", "fail_abs_ratio"
+    ]
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", StandardScaler(), numeric_cols),
+            ("cat", OneHotEncoder(drop="first", sparse_output=False), categorical_cols),
+        ],
+        remainder="drop"
+    )
+    return preprocessor
+
+def preprocess_features(df: pd.DataFrame):
+    df = add_engineered_features(df)
+    df = encode_binary_features(df)
     
-    X = pd.get_dummies(X, drop_first=True)
-
-    if scaler is None:
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-    else:
-        X_scaled = scaler.transform(X)
+    # Optional: convert categorical columns to dummy variables first
+    categorical_cols = ["school", "address", "famsize", "Pstatus", "Mjob", "Fjob", "reason", "guardian"]
+    df = pd.get_dummies(df, columns=categorical_cols, drop_first=True)
     
-    return X_scaled, scaler
-
+    # Convert all columns to float to satisfy MLflow
+    df = df.astype(float)
+    
+    # Scale numeric columns
+    numeric_cols = df.columns.drop(["Pass", "G3"], errors="ignore")  # leave out targets
+    scaler = StandardScaler()
+    df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
+    
+    return df

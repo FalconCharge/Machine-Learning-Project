@@ -10,7 +10,7 @@ def ensure_dir(path):
 def log_confusion_matrix(y_true, y_pred, model_name):
     ensure_dir("plots")
     cm = confusion_matrix(y_true, y_pred)
-    plt.figure(figsize=(4, 3))
+    plt.figure(figsize=(6, 4))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Greens')
     plt.title(f"{model_name} Confusion Matrix")
     plt.xlabel("Predicted"); plt.ylabel("Actual")
@@ -21,7 +21,7 @@ def log_confusion_matrix(y_true, y_pred, model_name):
 def log_residual_plot(y_true, y_pred, model_name):
     ensure_dir("plots")
     residuals = y_true - y_pred
-    plt.figure(figsize=(4, 3))
+    plt.figure(figsize=(7, 4))
     sns.scatterplot(x=y_pred, y=residuals)
     plt.axhline(0, color='red', linestyle='--')
     plt.title(f"{model_name} Residuals vs Predicted")
