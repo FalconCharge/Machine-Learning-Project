@@ -10,10 +10,13 @@ def ensure_dir(path):
 def log_confusion_matrix(y_true, y_pred, model_name):
     ensure_dir("plots")
     cm = confusion_matrix(y_true, y_pred)
+
+    labels = ["Not Passed", "Passed"]
+
     plt.figure(figsize=(6, 4))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Greens')
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', xticklabels=labels, yticklabels=labels)
     plt.title(f"{model_name} Confusion Matrix")
-    plt.xlabel("Predicted"); plt.ylabel("Actual")
+    plt.xlabel("Predicted", fontweight="bold"); plt.ylabel("Actual", fontweight="bold")
     path = f"plots/{model_name}_confusion.png"
     plt.savefig(path); plt.close()
     mlflow.log_artifact(path)
