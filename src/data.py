@@ -1,7 +1,8 @@
 import os
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from features import create_feature_pipeline, add_engineered_features, preprocess_features
+from features import preprocess_features
+
 RAW_PATH = "data/raw/student-por.csv"
 PROCESSED_PATH = "data/processed/student-por.csv"
 

@@ -23,7 +23,6 @@ def create_feature_pipeline(df: pd.DataFrame):
     df = encode_binary_features(df)
 
     categorical_cols = ["school", "address", "famsize", "Pstatus", "Mjob", "Fjob", "reason", "guardian"]
-    # categorical_cols = [] unCommenting this makes it better
 
     numeric_cols = [
         "age", "Medu", "Fedu", "traveltime", "studytime", "failures",

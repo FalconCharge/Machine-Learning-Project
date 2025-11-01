@@ -29,3 +29,6 @@ In your browser goto http://127.0.0.1:5000
 Metrics Used:
 - Classification: Accuracy + F1-score, with confusion matrix
 - Regression: MAE + RMSE, with residual analysis
+
+# AI Assistance Disclourse
+Some ideas, suggestions, and code structuring guidance were obtained using AI tools, specifically ChatGPT/Gwen-coder.2.5_3b, for reference and inspiration.
