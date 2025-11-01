@@ -38,3 +38,12 @@
 Additional note: there are several (382) students that belong to both datasets . 
 These students can be identified by searching for identical attributes
 that characterize each student, as shown in the annexed R file.
+
+
+# DownLoad instrucitons
+- Download the dataset from https://archive.ics.uci.edu/dataset/320/student+performance
+- Place the student-por.csv within data/raw/student-por.csv
+
+To get the processed data you can call python src/data.py
+
+
