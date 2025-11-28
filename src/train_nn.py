@@ -11,10 +11,9 @@ from evaluate import classification_metrics, regression_metrics
 from utils import log_confusion_matrix, log_residual_plot, random_search_trial_c, random_search_trial_r, log_classification_learning_curve, log_regression_learning_curve, log_nn_ablation, log_feature_importance
 
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
+mlflow.set_experiment("Student Performance NN Models")
 
-
-
-def train_nn_classifier(X_train, y_train, X_test, y_test, best_params):
+def train_nn_classifier(X_train, y_train, X_val, y_val, X_test, y_test, best_params, name="Final_KerasNN_Classifier"):
     if mlflow.active_run() is not None:
         mlflow.end_run()
     
@@ -38,28 +37,41 @@ def train_nn_classifier(X_train, y_train, X_test, y_test, best_params):
         metrics=["accuracy"]
     )
 
-    history = model.fit(
-        X_train, y_train,
-        epochs=best_params["epochs"],
-        batch_size=best_params["batch_size"],
-        verbose=0
-    )
+    if X_val is None:
+        history = model.fit(
+            X_train, y_train,
+            epochs=best_params["epochs"],
+            batch_size=best_params["batch_size"],
+            verbose=0
+        )
+    else:
+        history = model.fit(
+            X_train, y_train,
+            epochs=best_params["epochs"],
+            validation_data=(X_val, y_val),
+            batch_size=best_params["batch_size"],
+            verbose=0
+        )
 
-    log_classification_learning_curve(history, "Final_KerasNN_Classifier")
+    log_classification_learning_curve(history, name)
 
     preds = (model.predict(X_test) > 0.5).astype(int).flatten()
     metrics = classification_metrics(y_test, preds)
 
-    with mlflow.start_run(run_name="Final_KerasNN_Classifier", nested=True):
+    with mlflow.start_run(run_name=name, nested=True):
         mlflow.log_params(best_params)
         mlflow.log_metrics(metrics)
-        log_confusion_matrix(y_test, preds, "Final_KerasNN_Classifier")
-        mlflow.keras.log_model(model, "Final_KerasNN_Classifier")
+        log_confusion_matrix(y_test, preds, name)
+        mlflow.keras.log_model(
+            model,
+            artifact_path=name,
+            registered_model_name=name
+        )
     
 
     return model
 
-def train_nn_regression(X_train, y_train, X_test, y_test, best_params):
+def train_nn_regression(X_train, y_train, X_val, y_val, X_test, y_test, best_params, name="Final_KerasNN_Regression"):
     if mlflow.active_run() is not None:
         mlflow.end_run()
 
@@ -83,28 +95,41 @@ def train_nn_regression(X_train, y_train, X_test, y_test, best_params):
         metrics=["mae"]
     )
 
-    history = model.fit(
-        X_train, y_train,
-        epochs=best_params["epochs"],
-        batch_size=best_params["batch_size"],
-        verbose=0
-    )
+    if X_val is None:
+        history = model.fit(
+            X_train, y_train,
+            epochs=best_params["epochs"],
+            batch_size=best_params["batch_size"],
+            verbose=0
+        )
+    else:
+        history = model.fit(
+            X_train, y_train,
+            epochs=best_params["epochs"],
+            validation_data=(X_val, y_val),
+            batch_size=best_params["batch_size"],
+            verbose=0
+        )
 
-
-    log_regression_learning_curve(history, "Final_KerasNN_Regression")
+    log_regression_learning_curve(history, name)
 
     preds = model.predict(X_test).flatten()
     metrics = regression_metrics(y_test, preds)
 
     baseline_mae = mean_absolute_error(y_test, preds)
-    log_nn_ablation(model, X_test, y_test, "Final_KerasNN_Regression", baseline_mae)
+    log_nn_ablation(model, X_test, y_test, name, baseline_mae)
 
 
-    with mlflow.start_run(run_name="Final_KerasNN_Regression", nested=True):
+    with mlflow.start_run(run_name=name, nested=True):
         mlflow.log_params(best_params)
         mlflow.log_metrics(metrics)
-        log_residual_plot(y_test, preds, "Final_KerasNN_Regression")
-        mlflow.keras.log_model(model, "Final_KerasNN_Regression")
+        log_residual_plot(y_test, preds, name)
+        mlflow.keras.log_model(
+            model,
+            artifact_path=name,
+            registered_model_name=name
+        )
+
     
 
     return model
@@ -172,12 +197,16 @@ def main():
 
     print("Best hyperparameters:", best_c)
 
+    # Check it on the validation split
+    train_nn_classifier(X_train_c, y_train_c, X_val_c, y_val_c, X_val_c, y_val_c, best_c["params"], name="Final_KerasNN_Classifier_validation")
+
+
     # # Merge train + validation
     X_final_c = np.concatenate([X_train_c, X_val_c], axis=0)
     y_final_c = np.concatenate([y_train_c, y_val_c], axis=0)
 
-    # # # Train final NN model
-    train_nn_classifier(X_final_c, y_final_c, X_test_c, y_test_c, best_c["params"])
+    # # # Train final NN model on test split with validation data
+    train_nn_classifier(X_final_c, y_final_c, None, None, X_test_c, y_test_c, best_c["params"])
 
     best_r = None
     for _ in range(5):
@@ -186,14 +215,16 @@ def main():
         if best_r is None or result["avg_mae"] < best_r["avg_mae"]:
             best_r = result
 
-
     print("Best hyperparameters:", best_r)
+    
+    # Check it on the validation split
+    train_nn_regression(X_train_r, y_train_r, X_val_r, y_val_r, X_val_r, y_val_r, best_r["params"], name="Final_KerasNN_Regression_validation")
 
     # Merge train + validation
     X_final_r = np.concatenate([X_train_r, X_val_r], axis=0)
     y_final_r = np.concatenate([y_train_r, y_val_r], axis=0)
 
-    train_nn_regression(X_final_r, y_final_r, X_test_r, y_test_r, best_r["params"])
+    train_nn_regression(X_final_r, y_final_r, None, None, X_test_r, y_test_r, best_r["params"])
 
 
 

@@ -127,19 +127,28 @@ def log_feature_importance(model, X_test, y_test, model_name, metric):
     
     result = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42, scoring=metric)
     
+    importances = result.importances_mean
     sorted_idx = result.importances_mean.argsort()[::-1]
-    plt.figure(figsize=(8, 6))
-    plt.bar(range(X_test.shape[1]), result.importances_mean[sorted_idx])
-    plt.xticks(range(X_test.shape[1]), sorted_idx, rotation=90)
+
+    if hasattr(X_test, "columns"):
+        feature_names = np.array(X_test.columns)
+    else:
+        feature_names = np.array([f"feat_{i}" for i in range(X_test.shape[1])])
+
+    sorted_names = feature_names[sorted_idx]
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(sorted_names, importances[sorted_idx])
+    plt.gca().invert_yaxis()  # Most important at the top
     plt.title(f"{model_name} Feature Importance (Permutation)")
-    plt.xlabel("Feature Index")
-    plt.ylabel("Importance")
-    path = f"plots/{model_name}_feature_importance.png"
+    plt.xlabel("Importance")
     plt.tight_layout()
+
+    path = f"plots/{model_name}_feature_importance.png"
     plt.savefig(path)
     plt.close()
-    mlflow.log_artifact(path)
 
+    mlflow.log_artifact(path)
 
 def random_search_trial_c(X_train, y_train, param_space, k=5):
     # Pick random hyperparameters
@@ -159,12 +168,6 @@ def random_search_trial_c(X_train, y_train, param_space, k=5):
     for train_idx, val_idx in kf.split(X_train):
         X_tr, X_val = X_train[train_idx], X_train[val_idx]
         y_tr, y_val = y_train[train_idx], y_train[val_idx]
-
-        # classes = np.unique(y_tr)
-        # class_weights_array = compute_class_weight(class_weight='balanced', classes=classes, y=y_tr)
-        # class_weight_dict = dict(zip(classes, class_weights_array))
-
-        # class_weight_dict[0] *= 4.0
 
         # Build the model
         model = models.Sequential()
@@ -191,7 +194,6 @@ def random_search_trial_c(X_train, y_train, param_space, k=5):
             epochs=epochs,
             batch_size=batch_size,
             verbose=0,
-            # class_weight=class_weight_dict
         )
 
         y_pred_prob = model.predict(X_val, verbose=0)
