@@ -6,7 +6,7 @@ from sklearn.tree import DecisionTreeRegressor
 
 from data import runDataProcessing, load_processed_data
 from evaluate import classification_metrics, regression_metrics
-from utils import log_confusion_matrix, log_residual_plot
+from utils import log_confusion_matrix, log_residual_plot, log_feature_importance
 
 # Run data.py to process and split the data with the features.py for normalization and encoding
 runDataProcessing()
@@ -72,7 +72,7 @@ def train_decision_tree_regressor():
     print(f"\nBest max_depth={best_depth} | Val MAE={best_val_mae:.4f}, Val RMSE={best_val_rmse:.4f}")
 
     # Log the best model to MLflow
-    with mlflow.start_run(run_name=f"DecisionTree_Regression_best"):
+    with mlflow.start_run(run_name=f"DecisionTree_Regression_best", nested=True):
         model = best_model
         preds = model.predict(X_test_r)
         metrics = regression_metrics(y_test_r, preds)
@@ -80,10 +80,12 @@ def train_decision_tree_regressor():
         mlflow.log_params({"model_type": "DecisionTreeRegressor", "max_depth": best_depth})
         mlflow.log_metrics(metrics)
         log_residual_plot(y_test_r, preds, "DecisionTreeRegressor_Test")
+        log_feature_importance(model, X_test_r, y_test_r, "DecisionTreeRegressor_Test", metric="neg_mean_squared_error")
+
         mlflow.sklearn.log_model(model, name="DecisionTreeRegressor", input_example=X_test_r)
 
     # Log the best validation model to MLflow
-    with mlflow.start_run(run_name=f"DecisionTree_Regression_best_validation"):
+    with mlflow.start_run(run_name=f"DecisionTree_Regression_best_validation", nested=True):
         model = best_model
         preds = model.predict(X_val_r)
         metrics = regression_metrics(y_val_r, preds)
@@ -91,6 +93,8 @@ def train_decision_tree_regressor():
         mlflow.log_params({"model_type": "DecisionTreeRegressor", "max_depth": best_depth})
         mlflow.log_metrics(metrics)
         log_residual_plot(y_val_r, preds, "DecisionTreeRegressor_Validation")
+
+
         mlflow.sklearn.log_model(model, name="DecisionTreeRegressor", input_example=X_val_r)
 
 def train_logistic_regression():
@@ -131,6 +135,7 @@ def train_logistic_regression():
         mlflow.log_params({"model_type": "LogisticRegression"})
         mlflow.log_metrics(metrics)
         log_confusion_matrix(y_test_c, preds, "LogisticRegression_test")
+        log_feature_importance(model, X_test_c, y_test_c, "LogisticRegression_Test", metric="accuracy")
         mlflow.sklearn.log_model(model, name="LogisticRegression", input_example=X_test_c[:5])
     
     # Logistic Regression validation
@@ -157,6 +162,7 @@ def train_linear_regression():
         mlflow.log_params({"model_type": "LinearRegression"})
         mlflow.log_metrics(metrics)
         log_residual_plot(y_test_r, preds, "LinearRegression_test")
+        log_feature_importance(model, X_val_r, y_val_r, "LinearRegression_Test", metric="neg_mean_squared_error")
         mlflow.sklearn.log_model(model, name="LinearRegression", input_example=X_test_r)
 
     # Linear Regression validation
@@ -183,6 +189,7 @@ def train_naive_bayes():
         mlflow.log_params({"model_type": "NaiveBayes"})
         mlflow.log_metrics(metrics)
         log_confusion_matrix(y_test_c, preds, "NaiveBayes_Test")
+        log_feature_importance(model, X_test_c, y_test_c, "NaiveBayes_Test", metric="accuracy")
         mlflow.sklearn.log_model(model, name="NaiveBayes", input_example=X_test_c[:5])
 
     # Naive Bayes validation

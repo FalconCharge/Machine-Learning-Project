@@ -1,145 +1,75 @@
 import mlflow
 import tensorflow as tf
+tf.random.set_seed(42)
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
-from tensorflow.keras.metrics import F1Score
-import random
-
-
+import numpy as np
+np.random.seed(42)
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from data import runDataProcessing, load_processed_data
 from evaluate import classification_metrics, regression_metrics
-from utils import log_confusion_matrix, log_residual_plot, random_search_trial_c, random_search_trial_r
+from utils import log_confusion_matrix, log_residual_plot, random_search_trial_c, random_search_trial_r, log_classification_learning_curve, log_regression_learning_curve, log_nn_ablation, log_feature_importance
 
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
 
 
 
-
-
-
-def train_nn_classifier():
-    # Build a simple feed-forward NN
-    model = keras.Sequential([
-        keras.Input(shape=(X_train_c.shape[1],)),  
-        layers.Dense(64, activation="relu", kernel_regularizer=regularizers.l2(0.001)),
-        layers.Dropout(0.2),
-        layers.Dense(16, activation="relu", kernel_regularizer=regularizers.l2(0.001)),
-        layers.Dropout(0.2),
-        layers.Dense(1, activation="sigmoid", kernel_regularizer=regularizers.l2(0.001))
-    ])
-
-    model.compile(
-        optimizer="adam",
-        loss="binary_crossentropy",
-        metrics=["f1_score"]
-    )
-
-    # Train
-    history = model.fit(
-        X_train_c, y_train_c,
-        validation_data=(X_val_c, y_val_c),
-        epochs=30,
-        batch_size=32,
-        verbose=0
-    )
-
-    # Evaluate on test
-    test_loss, test_acc = model.evaluate(X_test_c, y_test_c, verbose=0)
-    preds = (model.predict(X_test_c) > 0.5).astype(int).flatten()
-
-    metrics = classification_metrics(y_test_c, preds)
-
-    # Log with MLflow
-    with mlflow.start_run(run_name="NeuralNetwork_Classification"):
-        mlflow.log_params({"model_type": "Keras_FFNN"})
-        mlflow.log_metrics(metrics)
-        log_confusion_matrix(y_test_c, preds, "Keras_NN_Classification")
-        mlflow.keras.log_model(model, "KerasNN_Classifier")
-
-def train_nn_regression():
-    model = keras.Sequential([
-        keras.Input(shape=(X_train_r.shape[1],)),  
-        layers.Dense(128, activation="relu"),
-        layers.Dropout(0.2),
-        layers.Dense(64, activation="relu"),
-        layers.Dropout(0.1),
-        layers.Dense(16, activation="relu"),
-        layers.Dense(1) 
-    ])
-
-    model.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=0.0005),
-        loss="mse",
-        metrics=["mae"]
-    )
-
-    history = model.fit(
-        X_train_r, y_train_r,
-        validation_data=(X_val_r, y_val_r),
-        epochs=40,
-        batch_size=32,
-        verbose=0
-    )
-
-    # Predict
-    preds = model.predict(X_test_r).flatten()
-    metrics = regression_metrics(y_test_r, preds)
-
-    # MLflow logging
-    with mlflow.start_run(run_name="NeuralNetwork_Regression"):
-        mlflow.log_params({"model_type": "KerasRegressionNN"})
-        mlflow.log_metrics(metrics)
-        log_residual_plot(y_test_r, preds, "Keras_NN_Regression")
-        mlflow.keras.log_model(model, "KerasNN_Regressor")
-
-def train_nn_classifier(X_train, y_train, X_val, y_val, X_test, y_test, best_params):
+def train_nn_classifier(X_train, y_train, X_test, y_test, best_params):
+    if mlflow.active_run() is not None:
+        mlflow.end_run()
+    
     model = keras.Sequential()
     model.add(layers.Input(shape=(X_train.shape[1],)))
 
-    for size in best_params["layers"]:
+    for size in best_params["hidden_layer_sizes"]:
         if best_params["activation"] == "leaky_relu":
             model.add(layers.Dense(size, kernel_regularizer=regularizers.l2(best_params["l2"])))
-            model.add(layers.LeakyReLU(alpha=0.1))
+            model.add(layers.LeakyReLU(negative_slope=0.1))
         else:
             model.add(layers.Dense(size, activation=best_params["activation"],
                                    kernel_regularizer=regularizers.l2(best_params["l2"])))
         model.add(layers.Dropout(best_params["dropout"]))
 
-    model.add(layers.Dense(1, activation="sigmoid"))
+    model.add(layers.Dense(1, activation=None))
 
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=best_params["lr"]),
         loss="binary_crossentropy",
-        metrics=["accuracy", F1Score(name="f1_score")]
+        metrics=["accuracy"]
     )
 
     history = model.fit(
         X_train, y_train,
-        validation_data=(X_val, y_val),
         epochs=best_params["epochs"],
         batch_size=best_params["batch_size"],
         verbose=0
     )
 
+    log_classification_learning_curve(history, "Final_KerasNN_Classifier")
+
     preds = (model.predict(X_test) > 0.5).astype(int).flatten()
     metrics = classification_metrics(y_test, preds)
 
-    with mlflow.start_run(run_name="Final_KerasNN_Classifier"):
+    with mlflow.start_run(run_name="Final_KerasNN_Classifier", nested=True):
         mlflow.log_params(best_params)
         mlflow.log_metrics(metrics)
         log_confusion_matrix(y_test, preds, "Final_KerasNN_Classifier")
         mlflow.keras.log_model(model, "Final_KerasNN_Classifier")
+    
 
     return model
 
-def train_nn_regression(X_train, y_train, X_val, y_val, X_test, y_test, best_params):
+def train_nn_regression(X_train, y_train, X_test, y_test, best_params):
+    if mlflow.active_run() is not None:
+        mlflow.end_run()
+
     model = keras.Sequential()
     model.add(layers.Input(shape=(X_train.shape[1],)))
 
-    for size in best_params["layers"]:
+    for size in best_params["hidden_layer_sizes"]:
         if best_params["activation"] == "leaky_relu":
             model.add(layers.Dense(size, kernel_regularizer=regularizers.l2(best_params["l2"])))
-            model.add(layers.LeakyReLU(alpha=0.1))
+            model.add(layers.LeakyReLU(negative_slope=0.1))
         else:
             model.add(layers.Dense(size, activation=best_params["activation"],
                                    kernel_regularizer=regularizers.l2(best_params["l2"])))
@@ -155,24 +85,29 @@ def train_nn_regression(X_train, y_train, X_val, y_val, X_test, y_test, best_par
 
     history = model.fit(
         X_train, y_train,
-        validation_data=(X_val, y_val),
         epochs=best_params["epochs"],
         batch_size=best_params["batch_size"],
         verbose=0
     )
 
+
+    log_regression_learning_curve(history, "Final_KerasNN_Regression")
+
     preds = model.predict(X_test).flatten()
     metrics = regression_metrics(y_test, preds)
 
-    with mlflow.start_run(run_name="Final_KerasNN_Regression"):
+    baseline_mae = mean_absolute_error(y_test, preds)
+    log_nn_ablation(model, X_test, y_test, "Final_KerasNN_Regression", baseline_mae)
+
+
+    with mlflow.start_run(run_name="Final_KerasNN_Regression", nested=True):
         mlflow.log_params(best_params)
         mlflow.log_metrics(metrics)
         log_residual_plot(y_test, preds, "Final_KerasNN_Regression")
         mlflow.keras.log_model(model, "Final_KerasNN_Regression")
+    
 
     return model
-
-
 
 
 def main():
@@ -192,59 +127,74 @@ def main():
 
     # 4. Build classification splits
     global X_train_c, y_train_c, X_val_c, y_val_c, X_test_c, y_test_c
-    X_train_c = train_class.drop(columns=["G3", "Pass"])
-    y_train_c = train_class["Pass"]
+    X_train_c = train_class.drop(columns=["G3", "Pass"]).values
+    y_train_c = train_class["Pass"].values
 
-    X_val_c = val_class.drop(columns=["G3", "Pass"])
-    y_val_c = val_class["Pass"]
+    X_val_c = val_class.drop(columns=["G3", "Pass"]).values
+    y_val_c = val_class["Pass"].values
 
-    X_test_c = test_class.drop(columns=["G3", "Pass"])
-    y_test_c = test_class["Pass"]
+    X_test_c = test_class.drop(columns=["G3", "Pass"]).values
+    y_test_c = test_class["Pass"].values
 
     # 5. Build regression splits
     global X_train_r, y_train_r, X_val_r, y_val_r, X_test_r, y_test_r
-    X_train_r = train_regres.drop(columns=["G3", "Pass"])
-    y_train_r = train_regres["G3"]
+    X_train_r = train_regres.drop(columns=["G3", "Pass"]).values
+    y_train_r = train_regres["G3"].values
 
-    X_val_r = val_regres.drop(columns=["G3", "Pass"])
-    y_val_r = val_regres["G3"]
+    X_val_r = val_regres.drop(columns=["G3", "Pass"]).values
+    y_val_r = val_regres["G3"].values
 
-    X_test_r = test_regres.drop(columns=["G3", "Pass"])
-    y_test_r = test_regres["G3"]
+    X_test_r = test_regres.drop(columns=["G3", "Pass"]).values
+    y_test_r = test_regres["G3"].values
 
 
     param_space = {
         "learning_rate": [0.0001, 0.001, 0.005, 0.01],
         "batch_size": [16, 32, 64],
-        "hidden_layer_sizes": [(64, 32), (128, 64), (32, 32)],
-        "dropout": [0.1, 0.2, 0.3, 0.5],
-        "l2": [0.0001, 0.001, 0.01],
+        "hidden_layer_sizes": [
+                    (16, 4),
+                    (16, 8),
+                    (8, 4),
+                    (8, 16),
+                ],
+        "dropout": [0.1, 0.2, 0.3, 0.4],
+        "l2": [0.0, 0.0001, 0.001, 0.01],
         "activation": ["relu", "tanh", "leaky_relu"],
-        "epochs": [50, 100, 150, 200]
+        "epochs": [100, 125, 150] 
     }
 
     best_c = None
-    for _ in range(10):
-        result = random_search_trial_c(X_train_c, y_train_c, X_val_c, y_val_c, param_space)
+    for _ in range(5):
+        result = random_search_trial_c(X_train_c, y_train_c, param_space, k=3)
         print(result)
-        if best_c is None or result["val_accuracy"] > best_c["val_accuracy"]:
+        if best_c is None or result["avg_f1"] > best_c["avg_f1"]:
             best_c = result
 
     print("Best hyperparameters:", best_c)
 
+    # # Merge train + validation
+    X_final_c = np.concatenate([X_train_c, X_val_c], axis=0)
+    y_final_c = np.concatenate([y_train_c, y_val_c], axis=0)
+
+    # # # Train final NN model
+    train_nn_classifier(X_final_c, y_final_c, X_test_c, y_test_c, best_c["params"])
+
     best_r = None
-    for _ in range(10):
-        result = random_search_trial_r(X_train_r, y_train_r, X_val_r, y_val_r, param_space)
+    for _ in range(5):
+        result = random_search_trial_r(X_train_r, y_train_r, param_space, k=3)
         print(result)
-        if best_r is None or result["val_mae"] < best_r["val_mae"]:
+        if best_r is None or result["avg_mae"] < best_r["avg_mae"]:
             best_r = result
 
 
     print("Best hyperparameters:", best_r)
 
-    # Train final models using best hyperparameters
-    final_class_model = train_nn_classifier(X_train_c, y_train_c, X_val_c, y_val_c, X_test_c, y_test_c, best_c["params"])
-    final_reg_model = train_nn_regression(X_train_r, y_train_r, X_val_r, y_val_r, X_test_r, y_test_r, best_r["params"])
+    # Merge train + validation
+    X_final_r = np.concatenate([X_train_r, X_val_r], axis=0)
+    y_final_r = np.concatenate([y_train_r, y_val_r], axis=0)
+
+    train_nn_regression(X_final_r, y_final_r, X_test_r, y_test_r, best_r["params"])
+
 
 
 if __name__ == "__main__":
