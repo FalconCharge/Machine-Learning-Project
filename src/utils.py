@@ -181,7 +181,8 @@ def random_search_trial_c(X_train, y_train, param_space, k=5):
                 model.add(layers.Activation(activation))
             model.add(layers.Dropout(dropout))
 
-        model.add(layers.Dense(1, activation=None))
+        model.add(layers.Dense(1, activation='sigmoid'))
+
 
 
         model.compile(
